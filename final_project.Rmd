@@ -1,30 +1,12 @@
----
-title: "Machine Learning Final"
-author: "Daniel Lougen"
-date: "`r Sys.Date()`"
-output: pdf_document
----
-#Setup
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+#Set up 
+```{r}
 library(tidyverse)
 library(caret)
-library(compare)
 
-#Load in data 
-rank <- read.csv("~/GitHub/Dog_Breed_Final_ML/Breed_Rank.csv")
-trait <- read.csv("~/GitHub/Dog_Breed_Final_ML/Breed_Traits.csv")
-  #Combine data
-
-br_R <- unique(rank$Breed)
-br_T <- unique(trait$Breed)
-
-sort_R <- sort(x = br_R,decreasing = F)
-
+#Read in data
+elon <- read.csv2("elon_clean.csv")
+train <- read.csv("tweet_train.csv")
+test <- read.csv("tweet_test.csv")
 ```
 
-#Dog data set exploration
-```{r}
-
-```
 
