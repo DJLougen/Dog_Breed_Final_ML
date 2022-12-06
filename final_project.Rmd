@@ -5,11 +5,19 @@ library(caret)
 library(lubridate)#filtering dates
 library(reticulate)
 library(recipes)
+library(vip)
 
 #Read in data
 elon <- read.csv("elon_clean.csv")
 train <- read.csv("tweet_train.csv")
 test <- read.csv("tweet_test.csv")
+```
+
+#Parallel processing
+```{r}
+library(doParallel)
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
 ```
 
 
@@ -108,6 +116,8 @@ tweet_encode_bind <- cbind(train_time_add,tweet_encode)
 tweet_encode_bind$sentiment <- factor(tweet_encode_bind$sentiment)
   #Drop cleanTweets
 tweet_encode_recipeReady <- tweet_encode_bind[,-2]
+
+tweet_encode_recipeReady$day <- as.numeric(tweet_encode_recipeReady$date)
 ```
 
 #Clean test data
@@ -148,7 +158,7 @@ testClean <- test %>% select(c(sentiment,date,at_dummy,cleanTweets))
 
 day <- word(testClean$date,1)
 
-day_nmr <- word(testClean$date,3)
+date <- word(testClean$date,3)
 
 month <- word(testClean$date, 2)
 
@@ -172,18 +182,18 @@ day_nmr <-  factor(day, levels = c("Mon", "Tue", "Wed",
             ordered = TRUE)
 day_nmr <- as.integer(day_nmr)
 testClean$day <- day_nmr
-testClean$day_nmr <- day_nmr
+testClean$date <- date
 testClean$month <- month
 
   #Remove date 
 test_time_add <- testClean %>% 
-  select(c(sentiment, cleanTweets, day, day_nmr, month, hour, minutes, at_dummy))
+  select(c(sentiment, cleanTweets, day, date, month, hour, minutes, at_dummy))
 
-#Encode data
+#Encode data 
 tweet_encode_test <- as.data.frame(LFmodel$encode(testClean$cleanTweets))
 
 #Bind columns 
-tweet_encode_bind <- cbind(test_time_add,tweet_encode)
+tweet_encode_bind <- cbind(test_time_add,tweet_encode_test)
 tweet_encode_bind$sentiment <- factor(tweet_encode_bind$sentiment)
   #Drop cleanTweets
 test_encode <- tweet_encode_bind[,-2]
@@ -208,8 +218,6 @@ blueprint_tweet_sentiment <- recipe(x = tweet_encode_recipeReady,
                   levels = c('Negative', 'Neutral', 'Positive')) %>% 
   step_normalize(all_numeric_predictors())
 
-recipe <- blueprint_tweet_sentiment %>% prep() %>% bake()
-
 #Create fold 
 folds = cut(seq(1, nrow(tweet_encode_recipeReady)), breaks = 10, labels = F)
 
@@ -228,7 +236,8 @@ cv <- trainControl(method = "cv",
 
 
 #Hyperparameter grid 
-grid <- data.frame(cp=seq(0,0.01,.001))
+grid <- data.frame(alpha = 0 , 
+               lambda = seq(0,3, 0.01))
 ```
 
 #GLM
@@ -236,10 +245,21 @@ grid <- data.frame(cp=seq(0,0.01,.001))
 set.seed(0294875)
 model_glmnet <- caret::train(sentiment~., data = tweet_encode_recipeReady,
                           method= "glmnet",
-                          trainControl = cv)
+                          trainControl = cv,
+                          tuneGrid = grid)
 
-prediction <- predict(model_rpart, test_encode, type = 'prob')
+prediction <- predict(model_glmnet, test_encode, type = 'prob')
 prediction
+
+#Best fit 
+model_glmnet$results
+model_glmnet$bestTune
+
+vip(model_glmnet)
+```
+#Lasso penalty model 
+```{r}
+
 ```
 
 
