@@ -6,6 +6,8 @@ library(lubridate)#filtering dates
 library(reticulate)
 library(recipes)
 library(vip)
+library(rpart)
+library(beepr)
 
 #Read in data
 elon <- read.csv("elon_clean.csv")
@@ -15,9 +17,9 @@ test <- read.csv("tweet_test.csv")
 
 #Parallel processing
 ```{r}
-library(doParallel)
-cl <- makePSOCKcluster(5)
-registerDoParallel(cl)
+#library(doParallel)
+#cl <- makePSOCKcluster(5)
+#registerDoParallel(cl)
 ```
 
 
@@ -36,6 +38,7 @@ model.name <- 'bert-base-uncased'
 longformer      <- st$models$Transformer(model.name)
 pooling_model   <- st$models$Pooling(longformer$get_word_embedding_dimension())
 LFmodel         <- st$SentenceTransformer(modules = list(longformer,pooling_model))
+beepr::beep(4)
 ```
 
 
@@ -118,6 +121,13 @@ tweet_encode_bind$sentiment <- factor(tweet_encode_bind$sentiment)
 tweet_encode_recipeReady <- tweet_encode_bind[,-2]
 
 tweet_encode_recipeReady$day <- as.numeric(tweet_encode_recipeReady$date)
+
+tweet_encode_recipeReady$date <- as.numeric(
+  gsub("0", "",tweet_encode_recipeReady$date))
+
+tweet_encode_recipeReady$sentiment <- ifelse(tweet_encode_recipeReady$sentiment == 4, "postive", "negative")
+
+beepr::beep(4)
 ```
 
 #Clean test data
@@ -197,6 +207,13 @@ tweet_encode_bind <- cbind(test_time_add,tweet_encode_test)
 tweet_encode_bind$sentiment <- factor(tweet_encode_bind$sentiment)
   #Drop cleanTweets
 test_encode <- tweet_encode_bind[,-2]
+
+test_encode$date <- as.numeric(
+  gsub("0", "",test_encode$date))
+
+test_encode$sentiment <- ifelse(test_encode$sentiment == 4, "postive", "negative")
+beepr::beep(4)
+
 ```
 
 
@@ -213,9 +230,8 @@ blueprint_tweet_sentiment <- recipe(x = tweet_encode_recipeReady,
   step_normalize(c('day_sin_1','day_cos_1',
                    'date_sin_1','date_cos_1',
                    'hour_sin_1','hour_cos_1')) %>%
-  step_num2factor(sentinment,
-                  transform = function(x) x + 1,
-                  levels = c('Negative', 'Neutral', 'Positive')) %>% 
+  step_num2factor(tweet_encode_recipeReady$sentinment,
+                  levels = c('negative', 'positive')) %>% 
   step_normalize(all_numeric_predictors())
 
 #Create fold 
@@ -238,15 +254,22 @@ cv <- trainControl(method = "cv",
 #Hyperparameter grid 
 grid <- data.frame(alpha = 0 , 
                lambda = seq(0,3, 0.01))
+
+beepr::beep(4)
+View(blueprint_tweet_sentiment %>% prep() %>% summary)
+
+str(blueprint_tweet_sentiment$term_info)
 ```
 
 #GLM
 ```{r}
 set.seed(0294875)
-model_glmnet <- caret::train(sentiment~., data = tweet_encode_recipeReady,
-                          method= "glmnet",
-                          trainControl = cv,
-                          tuneGrid = grid)
+model_glmnet <- caret::train(blueprint_tweet_sentiment, 
+                             data = tweet_encode_recipeReady,
+                             method= "glmnet",
+                             trainControl = cv,
+                             family = 'binomial',
+                             tuneGrid = grid)
 
 prediction <- predict(model_glmnet, test_encode, type = 'prob')
 prediction
@@ -256,10 +279,37 @@ model_glmnet$results
 model_glmnet$bestTune
 
 vip(model_glmnet)
-```
-#Lasso penalty model 
-```{r}
 
+beepr::beep(4)
 ```
+#Decision tree model 
+```{r}
+set.seed(0294875)
+cv_tree <- trainControl(method = "cv",
+                   index  = index,
+                   classProbs = F)
+
+grid_tree <- data.frame(cp=seq(0,0.02,.001)) #Hyper parameter: complexity parameter
+
+
+
+
+model_tree <- caret::train(blueprint_tweet_sentiment,
+                             data      = tweet_encode_recipeReady,
+                             method    = 'rpart',
+                             tuneGrid  = grid_tree,
+                             trControl = cv_tree,
+                             control   = list(minsplit=20,
+                                             minbucket = 2,
+                                             maxdepth = 30))
+model_tree$results
+model_tree$bestTune
+
+predict_tree <- predict(model_tree, test_encode)
+predict_tree
+beepr::beep(4)
+```
+
+#
 
 
