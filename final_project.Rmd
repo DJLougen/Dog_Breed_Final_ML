@@ -15,14 +15,6 @@ train <- read.csv("tweet_train.csv")
 test <- read.csv("tweet_test.csv")
 ```
 
-#Parallel processing
-```{r}
-library(doParallel)
-cl <- makePSOCKcluster(5)
-registerDoParallel(cl)
-```
-
-
 #Load in encoding model
 ```{r}
 use_condaenv('r-reticulate')
@@ -42,7 +34,7 @@ beepr::beep(4)
 ```
 
 
-#Process tweet data train
+#Process train data
 ```{r}
 #Remove symbols, space, and punctuation
 clean_tweets <- function(x) {
@@ -130,7 +122,7 @@ tweet_encode_recipeReady$sentiment <- ifelse(tweet_encode_recipeReady$sentiment 
 beepr::beep(4)
 ```
 
-#Clean test data
+#Process test data
 ```{r}
 #Remove symbols, space, and punctuation
 clean_tweets <- function(x) {
@@ -183,19 +175,21 @@ minutes <- time@minute       #Grab Min
 #year <- word(train$date,6) Only 2009, don't need year.  
 #unique(year)
 
-#put back into dataframe
-
+#Insert into dataframe
 testClean$hour <- hour
 testClean$minutes <- minutes
+
+  #Factor days of the week
 day_nmr <-  factor(day, levels = c("Mon", "Tue", "Wed", 
                           "Thu", "Fri", "Sat", "Sun"),
             ordered = TRUE)
+  #Convert to intergers for model
 day_nmr <- as.integer(day_nmr)
 testClean$day <- day_nmr
 testClean$date <- date
 testClean$month <- month
 
-  #Remove date 
+#Remove date 
 test_time_add <- testClean %>% 
   select(c(sentiment, cleanTweets, day, date, month, hour, minutes, at_dummy))
 
@@ -205,12 +199,15 @@ tweet_encode_test <- as.data.frame(LFmodel$encode(testClean$cleanTweets))
 #Bind columns 
 tweet_encode_bind <- cbind(test_time_add,tweet_encode_test)
 tweet_encode_bind$sentiment <- factor(tweet_encode_bind$sentiment)
-  #Drop cleanTweets
+
+#Drop text tweets
 test_encode <- tweet_encode_bind[,-2]
 
+#Remove 0 from numbers and recode them to numerics
 test_encode$date <- as.numeric(
   gsub("0", "",test_encode$date))
 
+#Factor sentiment
 test_encode$sentiment <- ifelse(test_encode$sentiment == 4, "postive", "negative")
 beepr::beep(4)
 
@@ -219,7 +216,8 @@ beepr::beep(4)
 
 #Recipe and folds 
 ```{r}
-blueprint_tweet_sentiment <- recipe(x = tweet_encode_recipeReady,
+#Create recipe
+blueprint <- recipe(x = tweet_encode_recipeReady,
                                     vars = colnames(tweet_encode_recipeReady), 
                                     roles = c('outcome', rep('predictor',774))) %>% 
   step_dummy('month', one_hot = T) %>% 
@@ -248,7 +246,7 @@ for (i in 1:10){
 
 cv <- trainControl(method = "cv",
                    index  = index,
-                   classProbs      = TRUE)
+                   classProbs = TRUE)
 
 
 #Hyperparameter grid 
@@ -256,9 +254,6 @@ grid <- data.frame(alpha = 0 ,
                lambda = seq(0,3, 0.01))
 
 beepr::beep(4)
-View(blueprint_tweet_sentiment %>% prep() %>% summary)
-
-str(blueprint_tweet_sentiment$term_info)
 ```
 
 #GLM
@@ -282,7 +277,6 @@ vip(model_glmnet)
 
 plot(model_glmnet)
 
-saveRDS(model_glmnet,"./model_glmnet")
 
 beepr::beep(4)
 ```
@@ -311,24 +305,40 @@ model_tree$bestTune
 
 predict_tree <- predict(model_tree, test_encode)
 predict_tree
-beepr::beep(4)
 
 plot(model_tree)
 
 
-saveRDS(model_tree,"./model_tree")
 ```
 
-#Neural network 
+#Gradient boosting forest
 ```{r}
-model_tree <- caret::train(blueprint_tweet_sentiment,
+#Grid
+grid_forest <- expand.grid(shrinkage = 0.1,
+                    n.trees = 1:500,
+                    interaction.depth = 5,
+                    n.minobsinnode = 10)
+
+model_gbm <- caret::train(blueprint_tweet_sentiment,
                              data      = tweet_encode_recipeReady,
-                             method    = 'rpart',
-                             tuneGrid  = grid_tree,
-                             trControl = cv_tree,
-                             control   = list(minsplit=20,
-                                             minbucket = 2,
-                                             maxdepth = 30))
+                             method    = 'gbm',
+                             tuneGrid  = grid_forest,
+                             trControl = cv,
+                             bag.fraction = 1,
+                             verbose = F)
+#Optimized parameters
+model_gbm$bestTune
+model_gbm$results[399,] #399 iteration
+
+#Predict against test data
+predict_gbm <- predict(model_gbm, test_encode,type = 'prob')
+predict_gbm
+
+vip(model_gbm)
+
+plot(model_gbm)
+
+saveRDS(model_gbm,"./GBM_model")
 ```
 
 
