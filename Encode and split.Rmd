@@ -6,13 +6,132 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(reticulate)
+library(caret)
 
+data <- training_1600000_processed_noemoticon <- read_csv("training.1600000.processed.noemoticon.csv")
+```
+#Set up reticulate and python environment for encoding
+```{r}
+use_condaenv('r-reticulate')
 
+st <- import('sentence_transformers')
 
+model.name <- 'bert-base-uncased'
 
+longformer      <- st$models$Transformer(model.name)
+pooling_model   <- st$models$Pooling(longformer$get_word_embedding_dimension())
+LFmodel         <- st$SentenceTransformer(modules = list(longformer,pooling_model))
+```
 
+#Clean data
+```{r}
+set.seed(8675309)
+#Drop ID, User_ID, Query, and the special one
+data_drop <- data[-c(2,4,5)]
+
+#Sample 5000 observations
+sample <- sample_n(data_drop, 5000)
+
+#Rename for clarity
+colnames(sample) <- c("sentiment", "date", "tweet")
+
+#Presence of at sign 
+at <- data.frame(grepl('@', sample$tweet))
+colnames(at) <- "at_Sign"
+#Code T/F statements to 1/0
+at_nmr <- ifelse(at$at_Sign==T,1,0) 
+
+sample$at_Sign <-at_nmr 
+
+#Clean tweets
+
+#Remove symbols, space, and punctuation
+clean_tweets <- function(x) {
+            x %>%
+                    # Remove URLs
+                    str_remove_all(" ?(f|ht)(tp)(s?)(://)(.*)[.|/](.*)") %>%
+                    # Remove mentions e.g. "@my_account"
+                    str_remove_all("@[[:alnum:]_]{4,}") %>%
+                    # Remove hash tags
+                    str_remove_all("#[[:alnum:]_]+") %>%
+                    # Replace "&" character reference with "and"
+                    str_replace_all("&amp;", "and") %>%
+                    # Remove punctuation, using a standard character class
+                    str_remove_all("[[:punct:]]") %>%
+                    # Remove "RT: " from beginning of retweets
+                    str_remove_all("^RT:? ") %>%
+                    # Replace any newline characters with a space
+                    str_replace_all("\\\n", " ") %>%
+                    # Make everything lowercase
+                    str_to_lower() %>%
+                    # Remove any trailing whitespace around the text
+                    str_trim("both")
+        }
+
+#Use function to create column of clean tweets
+cleanTweets<- clean_tweets(sample$tweet)
+
+#Add column into df
+sample$cleanTweets <- cleanTweets
+
+#Filter data frame for columns to use
+sample_clean <- sample %>% select(c(sentiment,date,at_Sign,cleanTweets))
+
+#Separate date into day, day #, month, year, hour
+
+day <- word(sample_clean$date,1)
+
+date <- word(sample_clean$date,3)
+
+month <- word(sample_clean$date, 2)
+
+#Grab time of day
+time <- word(sample_clean$date, 4)
+
+#Lubridate to subset each chunk of time
+time <-  lubridate::hms(time)
+hour <- time@hour            #Grab Hour 
+minutes <- time@minute       #Grab Min
+
+#year <- word(train$date,6) Only 2009, don't need year.  
+#unique(year)
+
+#put back into dataframe
+
+sample_clean$hour <- hour
+sample_clean$minutes <- minutes
+day_nmr <-  factor(day, levels = c("Mon", "Tue", "Wed", 
+                          "Thu", "Fri", "Sat", "Sun"),
+            ordered = TRUE)
+day_nmr <- as.integer(day_nmr)
+sample_clean$day <- day_nmr
+sample_clean$date <- date
+sample_clean$month <- month
+
+  #Remove date 
+sample_itr_two <- sample_clean %>% 
+  select(c(sentiment, cleanTweets, day, date, month, hour, minutes, at_Sign))
+
+#Encode data
+tweet_encode <- as.data.frame(LFmodel$encode(sample_itr_two$cleanTweets))
+
+#Bind columns 
+tweet_encode<- cbind(sample_itr_two,tweet_encode)
+tweet_encode$sentiment <- factor(tweet_encode_bind$sentiment)
+  #Drop cleanTweets
+tweet_encode_recipe <- tweet_encode_bind[,-2]
+
+tweet_encode_recipe$day <- as.numeric(tweet_encode_recipe$date)
+
+tweet_encode_recipe$date <- as.numeric(
+  gsub("0", "",tweet_encode_recipe$date))
+
+tweet_encode_recipeReady$sentiment <- ifelse(tweet_encode_recipe$sentiment == 4, "postive", "negative")
 
 ```
+
 
 
