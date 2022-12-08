@@ -17,9 +17,9 @@ test <- read.csv("tweet_test.csv")
 
 #Parallel processing
 ```{r}
-#library(doParallel)
-#cl <- makePSOCKcluster(5)
-#registerDoParallel(cl)
+library(doParallel)
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
 ```
 
 
@@ -280,6 +280,10 @@ model_glmnet$bestTune
 
 vip(model_glmnet)
 
+plot(model_glmnet)
+
+saveRDS(model_glmnet,"./model_glmnet")
+
 beepr::beep(4)
 ```
 #Decision tree model 
@@ -308,8 +312,24 @@ model_tree$bestTune
 predict_tree <- predict(model_tree, test_encode)
 predict_tree
 beepr::beep(4)
+
+plot(model_tree)
+
+
+saveRDS(model_tree,"./model_tree")
 ```
 
-#
+#Neural network 
+```{r}
+model_tree <- caret::train(blueprint_tweet_sentiment,
+                             data      = tweet_encode_recipeReady,
+                             method    = 'rpart',
+                             tuneGrid  = grid_tree,
+                             trControl = cv_tree,
+                             control   = list(minsplit=20,
+                                             minbucket = 2,
+                                             maxdepth = 30))
+```
+
 
 
