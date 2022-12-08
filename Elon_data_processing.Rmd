@@ -1,0 +1,42 @@
+---
+title: "Elon data prep"
+author: "Daniel Lougen"
+date: "2022-12-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+options(scipen = 99)
+setwd("Documents/GitHub/EDLD_FINAL/")
+library(tidyverse)
+library(lubridate)
+elon <- read.csv("elon_clean.csv")
+```
+
+
+```{r}
+#View data 
+#head(elon)
+#summary(elon)
+
+#Drop dirty tweets
+elon_drop <- elon[-c(1)]
+
+#Code dates 
+#year<- word(elon_drop$Date,1, sep = "-") only 2022 in the dataset
+month <-as.integer(word(elon_drop$Date,2, sep = "-")) #10 month period
+day <- word(elon_drop$Date,3, sep = "-")# < 31 days total
+day <- word(day) #Grab only the day number
+
+#add to DF
+elon_drop$day <- as.integer(day)#Convert from character to integer
+elon_drop$month <- month
+
+#Drop date
+date_drop <- elon_drop[-c(3)]
+
+#str(date_drop)
+
+write_csv(date_drop,"./elon_processed.csv")
+```
+
