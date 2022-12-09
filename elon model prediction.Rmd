@@ -13,8 +13,8 @@ library(recipes)
 library(vip)
 library(cutpointr)
 library(gt)
-elon <- read.csv("GitHub/EDLD_FINAL/elon_clean.csv")
-data <- read.csv("GitHub/EDLD_FINAL/elon_encoded.csv")
+elon <- read.csv("elon_clean.csv")
+data <- read.csv("elon_encoded.csv")
 data <- data[-c(1)]
 date <- 6
 hour <- 2
@@ -23,7 +23,7 @@ data$date <- date
 data$hour <- hour
 data$minutes <- minutes
 data$month <- "Jun"
-model <- readRDS("GitHub/EDLD_FINAL/GLM_Model")
+model <- readRDS("GBM_Model")
 ```
 
 #predict elons tweet data
