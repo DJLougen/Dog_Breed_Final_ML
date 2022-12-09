@@ -41,7 +41,7 @@ LFmodel         <- st$SentenceTransformer(modules = list(longformer,pooling_mode
 ```{r}
 #Create recipe
 blueprint <- recipe(x = train,vars = colnames(train), 
-                    roles = c('outcome', rep('predictor',774))) %>% 
+                    roles = c('outcome', rep('predictor',773))) %>% 
   step_dummy('month', one_hot = T) %>% 
   step_harmonic('day',frequency=1,cycle_size=7, role='predictor') %>%
   step_harmonic('date',frequency=1,cycle_size=31,role='predictor') %>%

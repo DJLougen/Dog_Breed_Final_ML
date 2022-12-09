@@ -1,0 +1,46 @@
+---
+title: "Elon Test"
+author: "Daniel Lougen"
+date: "2022-12-09"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(caret)
+library(reticulate)
+library(recipes)
+library(vip)
+library(cutpointr)
+library(gt)
+elon <- read.csv("GitHub/EDLD_FINAL/elon_clean.csv")
+data <- read.csv("GitHub/EDLD_FINAL/elon_encoded.csv")
+data <- data[-c(1)]
+date <- 6
+hour <- 2
+minutes <-43 
+data$date <- date
+data$hour <- hour
+data$minutes <- minutes
+data$month <- "Jun"
+model <- readRDS("GitHub/EDLD_FINAL/GLM_Model")
+```
+
+#predict elons tweet data
+```{r}
+#Predict data
+sentiment_prediction <- predict(model,data, type = "prob")
+#Cut point above chance
+sentiment_pred <- ifelse(sentiment_prediction$positive>.5, 1,0)
+
+elon$sentiment <- sentiment_pred
+
+#Correlations
+mod <- lm(sentiment ~ Likes + Retweets,data=elon)
+summary(mod)
+cor(elon$sentiment,elon$Likes)
+
+cor(elon$sentiment,elon$Retweets)
+
+```
+

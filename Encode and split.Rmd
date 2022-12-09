@@ -11,7 +11,8 @@ library(lubridate)
 library(reticulate)
 library(caret)
 
-data <- training_1600000_processed_noemoticon <- read_csv("training.1600000.processed.noemoticon.csv")
+data <- read_csv("training.1600000.processed.noemoticon.csv")
+elon <- read.csv("elon_processed.csv")
 ```
 #Set up reticulate and python environment for encoding
 ```{r}
@@ -37,14 +38,6 @@ sample <- sample_n(data_drop, 5000)
 
 #Rename for clarity
 colnames(sample) <- c("sentiment", "date", "tweet")
-
-#Presence of at sign 
-at <- data.frame(grepl('@', sample$tweet))
-colnames(at) <- "at_Sign"
-#Code T/F statements to 1/0
-at_nmr <- ifelse(at$at_Sign==T,1,0) 
-
-sample$at_Sign <-at_nmr 
 
 #Clean tweets
 
@@ -78,7 +71,7 @@ cleanTweets<- clean_tweets(sample$tweet)
 sample$cleanTweets <- cleanTweets
 
 #Filter data frame for columns to use
-sample_clean <- sample %>% select(c(sentiment,date,at_Sign,cleanTweets))
+sample_clean <- sample %>% select(c(sentiment,date,cleanTweets))
 
 #Separate date into day, day #, month, year, hour
 
@@ -113,7 +106,7 @@ sample_clean$month <- month
 
   #Remove date 
 sample_itr_two <- sample_clean %>% 
-  select(c(sentiment, cleanTweets, day, date, month, hour, minutes, at_Sign))
+  select(c(sentiment, cleanTweets, day, date, month, hour, minutes))
 
 #Encode data
 tweet_encode <- as.data.frame(LFmodel$encode(sample_itr_two$cleanTweets))
@@ -145,3 +138,18 @@ test <- tweet_encode_recipe[-trainIndex,]
 write.csv(train, "./tweet_train.csv")
 write.csv(test, "./tweet_test.csv")
 ```
+
+#Encode elon
+```{r}
+elon_encode <- as.data.frame(LFmodel$encode(elon$Cleaned_Tweets))
+
+elon_encode_bind<- cbind(elon,elon_encode)
+
+#Drop cleanTweets
+elon_encode_bind <- elon_encode_bind[-c(3)]
+
+write.csv(elon_encode_bind,"./elon_encoded.csv")
+```
+
+
+
