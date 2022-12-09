@@ -131,6 +131,7 @@ tweet_encode_recipe$date <- as.numeric(
 
 tweet_encode_recipeReady$sentiment <- ifelse(tweet_encode_recipe$sentiment == 4, "postive", "negative")
 
+
 ```
 
 
