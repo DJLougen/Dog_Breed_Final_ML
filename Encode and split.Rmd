@@ -119,20 +119,29 @@ sample_itr_two <- sample_clean %>%
 tweet_encode <- as.data.frame(LFmodel$encode(sample_itr_two$cleanTweets))
 
 #Bind columns 
-tweet_encode<- cbind(sample_itr_two,tweet_encode)
-tweet_encode$sentiment <- factor(tweet_encode_bind$sentiment)
+tweet_encode_bind<- cbind(sample_itr_two,tweet_encode)
+tweet_encode_bind$sentiment <- factor(tweet_encode_bind$sentiment)
   #Drop cleanTweets
 tweet_encode_recipe <- tweet_encode_bind[,-2]
 
 tweet_encode_recipe$day <- as.numeric(tweet_encode_recipe$date)
 
 tweet_encode_recipe$date <- as.numeric(
-  gsub("0", "",tweet_encode_recipe$date))
+  gsub("0", "",tweet_encode_recipe$date)) #Remove 0 from data and code as integer
 
-tweet_encode_recipeReady$sentiment <- ifelse(tweet_encode_recipe$sentiment == 4, "postive", "negative")
-
-
+tweet_encode_recipe$sentiment <- ifelse(tweet_encode_recipe$sentiment == 4, "postive", "negative") #Re-code for readability
 ```
 
 
+#Split into train and test 
+```{r}
+set.seed(8675309)
 
+trainIndex <- createDataPartition(tweet_encode_recipe$sentiment, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+train <- tweet_encode_recipe[trainIndex,]
+test <- tweet_encode_recipe[-trainIndex,]
+write.csv(train, "./tweet_train.csv")
+write.csv(test, "./tweet_test.csv")
+```

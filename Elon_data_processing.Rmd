@@ -7,7 +7,6 @@ output: html_document
 
 ```{r setup, include=FALSE}
 options(scipen = 99)
-setwd("Documents/GitHub/EDLD_FINAL/")
 library(tidyverse)
 library(lubridate)
 elon <- read.csv("elon_clean.csv")
