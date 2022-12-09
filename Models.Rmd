@@ -2,17 +2,22 @@
 ```{r}
 library(tidyverse)
 library(caret)
-library(lubridate)#filtering dates
 library(reticulate)
 library(recipes)
 library(vip)
 library(rpart)
 library(beepr)
+library(cutpointr)
+library(gt)
 
 #Read in data
 elon <- read.csv("elon_clean.csv")
 train <- read.csv("tweet_train.csv")
 test <- read.csv("tweet_test.csv")
+
+#Drop ID
+train <- train[-c(1)] 
+test <- test[-c(1)] 
 ```
 
 #Load in encoding model
@@ -30,196 +35,14 @@ model.name <- 'bert-base-uncased'
 longformer      <- st$models$Transformer(model.name)
 pooling_model   <- st$models$Pooling(longformer$get_word_embedding_dimension())
 LFmodel         <- st$SentenceTransformer(modules = list(longformer,pooling_model))
-beepr::beep(4)
-```
-
-
-#Process train data
-```{r}
-#Remove symbols, space, and punctuation
-clean_tweets <- function(x) {
-            x %>%
-                    # Remove URLs
-                    str_remove_all(" ?(f|ht)(tp)(s?)(://)(.*)[.|/](.*)") %>%
-                    # Remove mentions e.g. "@my_account"
-                    str_remove_all("@[[:alnum:]_]{4,}") %>%
-                    # Remove hash tags
-                    str_remove_all("#[[:alnum:]_]+") %>%
-                    # Replace "&" character reference with "and"
-                    str_replace_all("&amp;", "and") %>%
-                    # Remove punctuation, using a standard character class
-                    str_remove_all("[[:punct:]]") %>%
-                    # Remove "RT: " from beginning of retweets
-                    str_remove_all("^RT:? ") %>%
-                    # Replace any newline characters with a space
-                    str_replace_all("\\\n", " ") %>%
-                    # Make everything lowercase
-                    str_to_lower() %>%
-                    # Remove any trailing whitespace around the text
-                    str_trim("both")
-        }
-
-#Use function to create column of clean tweets
-cleanTweets<- clean_tweets(train$tweets)
-
-#Add column into df
-train$cleanTweets <- cleanTweets
-
-#Filter data frame for columns to use
-trainClean <- train %>% select(c(sentiment,date,at_dummy,cleanTweets))
-
-#Separate date into day, day #, month, year, hour
-
-day <- word(trainClean$date,1)
-
-date <- word(trainClean$date,3)
-
-month <- word(trainClean$date, 2)
-
-#Grab time of day
-time <- word(trainClean$date, 4)
-
-#Lubridate to subset each chunk of time
-time <-  lubridate::hms(time)
-hour <- time@hour            #Grab Hour 
-minutes <- time@minute       #Grab Min
-
-#year <- word(train$date,6) Only 2009, don't need year.  
-#unique(year)
-
-#put back into dataframe
-
-trainClean$hour <- hour
-trainClean$minutes <- minutes
-day_nmr <-  factor(day, levels = c("Mon", "Tue", "Wed", 
-                          "Thu", "Fri", "Sat", "Sun"),
-            ordered = TRUE)
-day_nmr <- as.integer(day_nmr)
-trainClean$day <- day_nmr
-trainClean$date <- date
-trainClean$month <- month
-
-  #Remove date 
-train_time_add <- trainClean %>% 
-  select(c(sentiment, cleanTweets, day, date, month, hour, minutes, at_dummy))
-
-#Encode data
-tweet_encode <- as.data.frame(LFmodel$encode(trainClean$cleanTweets))
-
-#Bind columns 
-tweet_encode_bind <- cbind(train_time_add,tweet_encode)
-tweet_encode_bind$sentiment <- factor(tweet_encode_bind$sentiment)
-  #Drop cleanTweets
-tweet_encode_recipeReady <- tweet_encode_bind[,-2]
-
-tweet_encode_recipeReady$day <- as.numeric(tweet_encode_recipeReady$date)
-
-tweet_encode_recipeReady$date <- as.numeric(
-  gsub("0", "",tweet_encode_recipeReady$date))
-
-tweet_encode_recipeReady$sentiment <- ifelse(tweet_encode_recipeReady$sentiment == 4, "postive", "negative")
-
-beepr::beep(4)
-```
-
-#Process test data
-```{r}
-#Remove symbols, space, and punctuation
-clean_tweets <- function(x) {
-            x %>%
-                    # Remove URLs
-                    str_remove_all(" ?(f|ht)(tp)(s?)(://)(.*)[.|/](.*)") %>%
-                    # Remove mentions e.g. "@my_account"
-                    str_remove_all("@[[:alnum:]_]{4,}") %>%
-                    # Remove hash tags
-                    str_remove_all("#[[:alnum:]_]+") %>%
-                    # Replace "&" character reference with "and"
-                    str_replace_all("&amp;", "and") %>%
-                    # Remove punctuation, using a standard character class
-                    str_remove_all("[[:punct:]]") %>%
-                    # Remove "RT: " from beginning of retweets
-                    str_remove_all("^RT:? ") %>%
-                    # Replace any newline characters with a space
-                    str_replace_all("\\\n", " ") %>%
-                    # Make everything lowercase
-                    str_to_lower() %>%
-                    # Remove any trailing whitespace around the text
-                    str_trim("both")
-        }
-
-#Use function to create column of clean tweets
-cleanTweets<- clean_tweets(test$tweets)
-
-#Add column into df
-test$cleanTweets <- cleanTweets
-
-#Filter data frame for columns to use
-testClean <- test %>% select(c(sentiment,date,at_dummy,cleanTweets))
-
-#Separate date into day, day #, month, year, hour
-
-day <- word(testClean$date,1)
-
-date <- word(testClean$date,3)
-
-month <- word(testClean$date, 2)
-
-#Grab time of day
-time <- word(testClean$date, 4)
-
-#Lubridate to subset each chunk of time
-time <-  lubridate::hms(time)
-hour <- time@hour            #Grab Hour 
-minutes <- time@minute       #Grab Min
-
-#year <- word(train$date,6) Only 2009, don't need year.  
-#unique(year)
-
-#Insert into dataframe
-testClean$hour <- hour
-testClean$minutes <- minutes
-
-  #Factor days of the week
-day_nmr <-  factor(day, levels = c("Mon", "Tue", "Wed", 
-                          "Thu", "Fri", "Sat", "Sun"),
-            ordered = TRUE)
-  #Convert to intergers for model
-day_nmr <- as.integer(day_nmr)
-testClean$day <- day_nmr
-testClean$date <- date
-testClean$month <- month
-
-#Remove date 
-test_time_add <- testClean %>% 
-  select(c(sentiment, cleanTweets, day, date, month, hour, minutes, at_dummy))
-
-#Encode data 
-tweet_encode_test <- as.data.frame(LFmodel$encode(testClean$cleanTweets))
-
-#Bind columns 
-tweet_encode_bind <- cbind(test_time_add,tweet_encode_test)
-tweet_encode_bind$sentiment <- factor(tweet_encode_bind$sentiment)
-
-#Drop text tweets
-test_encode <- tweet_encode_bind[,-2]
-
-#Remove 0 from numbers and recode them to numerics
-test_encode$date <- as.numeric(
-  gsub("0", "",test_encode$date))
-
-#Factor sentiment
-test_encode$sentiment <- ifelse(test_encode$sentiment == 4, "postive", "negative")
-beepr::beep(4)
 
 ```
-
 
 #Recipe and folds 
 ```{r}
 #Create recipe
-blueprint <- recipe(x = tweet_encode_recipeReady,
-                                    vars = colnames(tweet_encode_recipeReady), 
-                                    roles = c('outcome', rep('predictor',774))) %>% 
+blueprint <- recipe(x = train,vars = colnames(train), 
+                    roles = c('outcome', rep('predictor',774))) %>% 
   step_dummy('month', one_hot = T) %>% 
   step_harmonic('day',frequency=1,cycle_size=7, role='predictor') %>%
   step_harmonic('date',frequency=1,cycle_size=31,role='predictor') %>%
@@ -228,12 +51,10 @@ blueprint <- recipe(x = tweet_encode_recipeReady,
   step_normalize(c('day_sin_1','day_cos_1',
                    'date_sin_1','date_cos_1',
                    'hour_sin_1','hour_cos_1')) %>%
-  step_num2factor(tweet_encode_recipeReady$sentinment,
-                  levels = c('negative', 'positive')) %>% 
   step_normalize(all_numeric_predictors())
 
 #Create fold 
-folds = cut(seq(1, nrow(tweet_encode_recipeReady)), breaks = 10, labels = F)
+folds = cut(seq(1, nrow(train)), breaks = 10, labels = F)
 
 #Index list
 index <-vector('list', 10)
@@ -259,27 +80,54 @@ beepr::beep(4)
 #GLM
 ```{r}
 set.seed(0294875)
-model_glmnet <- caret::train(blueprint_tweet_sentiment, 
-                             data = tweet_encode_recipeReady,
+model_glmnet <- caret::train(blueprint, 
+                             data = train,
                              method= "glmnet",
                              trainControl = cv,
                              family = 'binomial',
                              tuneGrid = grid)
 
-prediction <- predict(model_glmnet, test_encode, type = 'prob')
-prediction
+prediction_glm <- predict(model_glmnet, test, type = 'prob')
 
 #Best fit 
-model_glmnet$results
 model_glmnet$bestTune
+model_glmnet$results[29,]
 
 vip(model_glmnet)
 
 plot(model_glmnet)
 
-
-beepr::beep(4)
+saveRDS(model_glmnet,"./GLM_Model")
 ```
+
+#GLM accuracy 
+```{r}
+#Confusion matrix
+glm_pred_class <- ifelse(prediction_glm$positive>.6, 1,0)
+glm_confusion <- table(test$sentiment,
+                      glm_pred_class)
+  #AUC
+glm_cut <- cutpointr(x = prediction_glm$positive,
+                 class = test$sentiment)
+glm_auc <- auc(glm_cut) 
+  #ACC
+glm_acc <-model_glmnet$results[29,][3]
+glm_rsq <- glm_acc^2
+  #TPR
+glm_tpr <- glm_confusion[2,2]/
+  (glm_confusion[2,1]+
+     glm_confusion[2,2])
+  #TNR
+glm_tnr <- glm_confusion[1,1]/
+  (glm_confusion[1,1] + 
+     glm_confusion[1,2])
+
+  #PRE
+glm_pre <- glm_confusion[2,2]/
+  (glm_confusion[1,2] +
+     glm_confusion[2,2])
+```
+
 #Decision tree model 
 ```{r}
 set.seed(0294875)
@@ -292,23 +140,51 @@ grid_tree <- data.frame(cp=seq(0,0.02,.001)) #Hyper parameter: complexity parame
 
 
 
-model_tree <- caret::train(blueprint_tweet_sentiment,
-                             data      = tweet_encode_recipeReady,
+model_tree <- caret::train(blueprint,
+                             data      = train,
                              method    = 'rpart',
                              tuneGrid  = grid_tree,
                              trControl = cv_tree,
                              control   = list(minsplit=20,
                                              minbucket = 2,
                                              maxdepth = 30))
-model_tree$results
-model_tree$bestTune
 
-predict_tree <- predict(model_tree, test_encode)
+model_tree$bestTune
+model_tree$results[4,]
+
+predict_tree <- predict(model_tree, test,type = 'prob')
 predict_tree
 
-plot(model_tree)
+saveRDS(model_tree,"./Tree_Model")
 
+```
 
+#Tree accuracy 
+```{r}
+#Confusion matrix
+tree_pred_class <- ifelse(predict_tree$positive>.6, 1,0)
+tree_confusion <- table(test$sentiment,
+                      tree_pred_class)
+  #AUC
+tree_cut <- cutpointr(x = predict_tree$positive,
+                 class = test$sentiment)
+tree_auc <- auc(glm_cut) 
+  #ACC
+tree_acc <-model_tree$results[4,][2]
+tree_rsq <- tree_acc^2
+  #TPR
+tree_tpr <- tree_confusion[2,2]/
+  (tree_confusion[2,1]+
+     tree_confusion[2,2])
+  #TNR
+tree_tnr <- tree_confusion[1,1]/
+  (tree_confusion[1,1] + 
+     tree_confusion[1,2])
+
+  #PRE
+tree_pre <- tree_confusion[2,2]/
+  (tree_confusion[1,2] +
+     tree_confusion[2,2])
 ```
 
 #Gradient boosting forest
@@ -317,10 +193,10 @@ plot(model_tree)
 grid_forest <- expand.grid(shrinkage = 0.1,
                     n.trees = 1:500,
                     interaction.depth = 5,
-                    n.minobsinnode = 10)
+                    n.minobsinnode = 10) 
 
-model_gbm <- caret::train(blueprint_tweet_sentiment,
-                             data      = tweet_encode_recipeReady,
+model_gbm <- caret::train(blueprint,
+                             data      = train,
                              method    = 'gbm',
                              tuneGrid  = grid_forest,
                              trControl = cv,
@@ -331,15 +207,61 @@ model_gbm$bestTune
 model_gbm$results[399,] #399 iteration
 
 #Predict against test data
-predict_gbm <- predict(model_gbm, test_encode,type = 'prob')
-predict_gbm
-
-vip(model_gbm)
-
-plot(model_gbm)
+predict_gbm <- predict(model_gbm, test,type = 'prob')
 
 saveRDS(model_gbm,"./GBM_model")
 ```
 
+#GBM accuracy 
+```{r}
+#Confusion matrix
+gbm_pred_class <- ifelse(predict_gbm$positive>.6, 1,0)
+gbm_confusion <- table(test$sentiment,
+                      gbm_pred_class)
+  #AUC
+gbm_cut <- cutpointr(x = gbm_pred_class,
+                 class = test$sentiment)
+gbm_auc <- auc(gbm_cut) 
+  #ACC
+gbm_acc <-model_gbm$results[399,][5]
+gbm_rsq <- gbm_acc^2
+  #TPR
+gbm_tpr <- gbm_confusion[2,2]/
+  (gbm_confusion[2,1]+
+     gbm_confusion[2,2])
+  #TNR
+gbm_tnr <- gbm_confusion[1,1]/
+  (gbm_confusion[1,1] + 
+     gbm_confusion[1,2])
 
+  #PRE
+gbm_pre <- gbm_confusion[2,2]/
+  (gbm_confusion[1,2] +
+     gbm_confusion[2,2])
+```
+
+#Compare
+```{r}
+df <- tibble(auc = c(glm_auc, tree_auc, gbm_auc),
+                    acc = c(glm_acc$Accuracy,tree_acc$Accuracy,gbm_acc$Accuracy),
+                    tpr = c(glm_tpr,tree_tpr,gbm_tpr),
+                    tnr = c(glm_tnr,tree_tnr, gbm_tnr),
+                    pre = c(glm_pre,tree_pre,gbm_pre),
+                    Rsq = c(glm_rsq, tree_rsq, gbm_rsq))
+rownames(df) <- c("GLM", "Tree", "GBM")
+tab <- df %>% gt( rownames_to_stub = T) %>% 
+  tab_header("Machine learning model comparison",
+             subtitle = "General linear model,
+             Forest model, and Gradient boosted foest model")
+#gtsave(tab,"table.html")
+
+plot(model_glmnet)
+plot(model_tree)
+plot(model_gbm)
+vip(model_glmnet,num_features = 10, geom = "point") + theme_dark()
+vip(model_tree,num_features = 10, geom = "point") + theme_dark()
+vip(model_gbm,num_features = 10, geom = "point") + theme_dark()
+
+
+```
 

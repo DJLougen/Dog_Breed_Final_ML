@@ -129,7 +129,7 @@ tweet_encode_recipe$day <- as.numeric(tweet_encode_recipe$date)
 tweet_encode_recipe$date <- as.numeric(
   gsub("0", "",tweet_encode_recipe$date)) #Remove 0 from data and code as integer
 
-tweet_encode_recipe$sentiment <- ifelse(tweet_encode_recipe$sentiment == 4, "postive", "negative") #Re-code for readability
+tweet_encode_recipe$sentiment <- ifelse(tweet_encode_recipe$sentiment == 4, "positive", "negative") #Re-code for readability
 ```
 
 
